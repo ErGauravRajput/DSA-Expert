@@ -122,7 +122,7 @@ function App() {
         {isTyping && (
           <div className="flex items-start mb-4">
             <img
-              src="https://img.daisyui.com/images/profile/demo/kenobee@192.webp"
+              src="AI.png"
               alt="AI typing"
               className="w-10 h-10 rounded-full mr-3"
             />
