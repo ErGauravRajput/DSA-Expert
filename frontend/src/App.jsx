@@ -1,180 +1,178 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { BsSendFill } from "react-icons/bs";
-import { MdDarkMode, MdLightMode } from "react-icons/md";
+import { MdDarkMode, MdLightMode, MdDeleteOutline } from "react-icons/md";
+// Suggestion: install react-markdown to render code blocks properly
+// import ReactMarkdown from 'react-markdown'; 
 
 function App() {
   const [message, setMessage] = useState("");
   const [chats, setChats] = useState([]);
-  const scrollRef = useRef(null);
   const [isTyping, setIsTyping] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(true); // Default to dark for "Expert" feel
+  
+  const scrollRef = useRef(null);
+  const inputRef = useRef(null);
+
+  // Auto-scroll to bottom whenever chats update
+  const scrollToBottom = useCallback(() => {
+    scrollRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, []);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [chats]);
+    scrollToBottom();
+  }, [chats, isTyping, scrollToBottom]);
 
-  const animateAIResponse = async (fullText, updatedChats) => {
-    let displayedText = "";
-    setIsTyping(true);
+  // Optimized Animation: Updates only the last message
+  const animateAIResponse = async (fullText) => {
+    setIsTyping(false); 
+    let currentText = "";
+    
+    // Add an empty placeholder for the AI response
+    setChats((prev) => [...prev, { role: "model", text: "" }]);
+
     for (let i = 0; i < fullText.length; i++) {
-      displayedText += fullText[i];
-      setChats([...updatedChats, { role: "model", text: displayedText }]);
-      await new Promise((resolve) => setTimeout(resolve, 15));
+      currentText += fullText[i];
+      // Functional update to avoid dependency issues
+      setChats((prev) => {
+        const newChats = [...prev];
+        newChats[newChats.length - 1] = { role: "model", text: currentText };
+        return newChats;
+      });
+      // Faster typing for longer strings, slower for short ones
+      const delay = fullText.length > 100 ? 5 : 15;
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
-    setIsTyping(false);
   };
 
-  const handleSend = async (message) => {
+  const handleSend = async () => {
+    const trimmedMsg = message.trim();
+    if (!trimmedMsg || isTyping) return;
+
+    const userMessage = { role: "user", text: trimmedMsg };
+    setChats((prev) => [...prev, userMessage]);
+    setMessage("");
+    setIsTyping(true);
+
     try {
-      if (!message.trim()) return;
-
-      const updatedChats = [...chats, { role: "user", text: message }];
-      setChats(updatedChats);
-      setMessage("");
-      setIsTyping(true);
-
       const response = await fetch("https://dsa-expert-1.onrender.com/ai/chat", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messages: message,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: trimmedMsg }),
       });
 
       const data = await response.json();
-      await animateAIResponse(data.message, updatedChats);
+      await animateAIResponse(data.message);
     } catch (error) {
-      console.error("Error fetching AI response:", error);
+      console.error("Error:", error);
+      setChats((prev) => [...prev, { role: "model", text: "⚠️ Error: Could not connect to the server." }]);
       setIsTyping(false);
     }
   };
 
+  const clearChat = () => {
+    if (window.confirm("Clear all messages?")) setChats([]);
+  };
+
   return (
-    <div
-      className={`flex flex-col h-screen ${
-        darkMode ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-900"
-      }`}
-    >
+    <div className={`flex flex-col h-screen transition-colors duration-300 ${
+      darkMode ? "bg-[#0b0e14] text-gray-100" : "bg-gray-50 text-gray-900"
+    }`}>
+      
       {/* Header */}
-      <div
-        className={`w-full py-4 px-6 shadow-md flex items-center justify-between ${
-          darkMode
-            ? "bg-gradient-to-r from-gray-800 to-gray-700"
-            : "bg-gradient-to-r from-blue-600 to-indigo-700 text-white"
-        }`}
-      >
-        <h1 className="font-bold text-lg flex items-center gap-2">
-          🚀 DSA Expert
-        </h1>
-        <button
-          onClick={() => setDarkMode(!darkMode)}
-          className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"
-        >
-          {darkMode ? (
-            <MdLightMode size={22} className="text-yellow-400" />
-          ) : (
-            <MdDarkMode size={22} className="text-gray-100" />
-          )}
-        </button>
-      </div>
-
-      {/* Chat Container */}
-      <div className="flex-1 overflow-y-auto p-6 mb-24 w-full">
-        {chats.map((chat, index) => (
-          <div
-            key={index}
-            className={`flex items-start mb-4 ${
-              chat.role === "user" ? "justify-end" : "justify-start"
-            }`}
-          >
-            {chat.role === "model" && (
-              <img
-                src="/AI.png"
-                alt="AI"
-                className="w-10 h-10 rounded-full mr-3"
-              />
-            )}
-            <div
-              className={`px-4 py-2 rounded-2xl max-w-2xl break-words shadow-sm ${
-                chat.role === "user"
-                  ? "bg-blue-500 text-white rounded-br-none"
-                  : darkMode
-                  ? "bg-gray-700 text-gray-200 rounded-bl-none"
-                  : "bg-gray-200 text-gray-900 rounded-bl-none"
-              }`}
-            >
-              {chat.text}
-            </div>
-            {chat.role === "user" && (
-              <img
-                src="/profile.png"
-                alt="You"
-                className="w-10 h-10 rounded-full ml-3"
-              />
-            )}
+      <header className={`sticky top-0 z-10 w-full py-4 px-8 flex items-center justify-between backdrop-blur-md border-b ${
+        darkMode ? "bg-gray-900/80 border-gray-700" : "bg-white/80 border-gray-200"
+      }`}>
+        <div className="flex items-center gap-3">
+          <div className="bg-blue-600 p-2 rounded-lg shadow-lg shadow-blue-500/20">
+            <span className="text-xl">🚀</span>
           </div>
-        ))}
-
-        {isTyping && (
-          <div className="flex items-start mb-4">
-            <img
-              src="AI.png"
-              alt="AI typing"
-              className="w-10 h-10 rounded-full mr-3"
-            />
-            <div
-              className={`px-4 py-2 rounded-2xl max-w-2xl shadow-sm ${
-                darkMode
-                  ? "bg-gray-700 text-gray-200 rounded-bl-none"
-                  : "bg-gray-200 text-gray-900 rounded-bl-none"
-              }`}
-            >
-              Typing...
-            </div>
+          <div>
+            <h1 className="font-bold text-xl tracking-tight">DSA Expert</h1>
+            <p className="text-[10px] uppercase tracking-widest text-blue-500 font-semibold">AI Assistant</p>
           </div>
-        )}
-        <div ref={scrollRef}></div>
-      </div>
-
-      {/* Input Bar */}
-      <div className="fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full flex justify-center mb-6">
-        <div
-          className={`flex items-center w-[70%] max-w-2xl rounded-full px-4 py-2 shadow-lg ${
-            darkMode
-              ? "bg-gray-800 border border-gray-600"
-              : "bg-white border border-gray-300"
-          }`}
-        >
-          <input
-            type="text"
-            placeholder="Ask anything about DSA..."
-            className={`flex-1 outline-none px-3 py-2 rounded-full ${
-              darkMode
-                ? "bg-gray-800 text-white placeholder-gray-400"
-                : "bg-white text-gray-700"
-            }`}
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleSend(message);
-            }}
-          />
-          <button
-            className={`ml-2 ${
-              darkMode
-                ? "text-blue-400 hover:text-blue-600"
-                : "text-blue-600 hover:text-blue-800"
-            }`}
-            onClick={() => handleSend(message)}
-          >
-            <BsSendFill size={22} />
+        </div>
+        
+        <div className="flex gap-4">
+          <button onClick={clearChat} className="p-2 hover:text-red-500 transition-colors" title="Clear Chat">
+            <MdDeleteOutline size={22} />
+          </button>
+          <button onClick={() => setDarkMode(!darkMode)} className="p-2 rounded-xl bg-gray-200/50 dark:bg-gray-800 hover:scale-110 transition-transform">
+            {darkMode ? <MdLightMode size={20} className="text-yellow-400" /> : <MdDarkMode size={20} />}
           </button>
         </div>
-      </div>
+      </header>
+
+      {/* Chat Canvas */}
+      <main className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-8">
+        <div className="max-w-4xl mx-auto space-y-6">
+          {chats.length === 0 && (
+            <div className="text-center py-20 opacity-50">
+              <p className="text-lg">Ask me about Arrays, Graphs, or Dynamic Programming!</p>
+            </div>
+          )}
+
+          {chats.map((chat, index) => (
+            <div key={index} className={`flex ${chat.role === "user" ? "justify-end" : "justify-start"}`}>
+              <div className={`flex max-w-[85%] md:max-w-[70%] ${chat.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
+                <div className={`flex-shrink-0 h-10 w-10 rounded-xl flex items-center justify-center shadow-sm ${
+                  chat.role === "user" ? "ml-3 bg-blue-600" : "mr-3 bg-gray-700"
+                }`}>
+                  {chat.role === "user" ? "👤" : "🤖"}
+                </div>
+                <div className={`px-5 py-3 rounded-2xl leading-relaxed ${
+                  chat.role === "user" 
+                    ? "bg-blue-600 text-white rounded-tr-none shadow-blue-500/10" 
+                    : darkMode ? "bg-gray-800 text-gray-200 rounded-tl-none border border-gray-700" : "bg-white text-gray-800 rounded-tl-none border border-gray-200 shadow-sm"
+                }`}>
+                  <p className="whitespace-pre-wrap text-sm md:text-base">{chat.text}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {isTyping && (
+            <div className="flex justify-start animate-pulse">
+               <div className="mr-3 h-10 w-10 rounded-xl bg-gray-700 flex items-center justify-center text-xs">...</div>
+               <div className={`px-6 py-3 rounded-2xl ${darkMode ? "bg-gray-800" : "bg-gray-200"}`}>
+                 <span className="flex gap-1">
+                   <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></span>
+                   <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0.2s]"></span>
+                   <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0.4s]"></span>
+                 </span>
+               </div>
+            </div>
+          )}
+          <div ref={scrollRef} />
+        </div>
+      </main>
+
+      {/* Glassmorphic Input Bar */}
+      <footer className="p-4 md:p-8">
+        <div className={`max-w-4xl mx-auto flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl transition-all border ${
+          darkMode ? "bg-gray-800/50 border-gray-700 focus-within:border-blue-500" : "bg-white border-gray-200 focus-within:border-blue-400"
+        } backdrop-blur-xl`}>
+          <input
+            ref={inputRef}
+            type="text"
+            placeholder="Type your DSA question..."
+            className="flex-1 bg-transparent outline-none text-sm md:text-base"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSend()}
+          />
+          <button
+            onClick={handleSend}
+            disabled={!message.trim() || isTyping}
+            className={`p-3 rounded-xl transition-all ${
+              message.trim() && !isTyping 
+                ? "bg-blue-600 text-white hover:bg-blue-700 hover:scale-105 active:scale-95" 
+                : "bg-gray-600/20 text-gray-500 cursor-not-allowed"
+            }`}
+          >
+            <BsSendFill size={18} />
+          </button>
+        </div>
+      </footer>
     </div>
   );
 }
