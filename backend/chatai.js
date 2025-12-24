@@ -54,7 +54,7 @@ const embeddings = new GoogleGenerativeAIEmbeddings({
    const pineconeIndex = pinecone.Index(process.env.PINECONE_INDEX_NAME);
 
    const searchResults = await pineconeIndex.query({
-    topK: 10,
+    topK: 2,
     vector: queryVector,
     includeMetadata: true,
     });
